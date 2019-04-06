@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="http://code.jquery.com/jquery-3.3.1.min.js"
+            integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+</head>
+<body>
+<div style="display: flex;">
+    <div style="flex: .5;">
+        <input id="comment-content-input" placeholder="내용">
+        <button id="post" onclick="postComment()">확인</button>
+    </div>
+    <div style="flex: .5;">
+        <input id=user-name-input" placeholder="이름">
+        <input id="user-email" placeholder="이메일">
+        <button id="addUser" onclick="addUser()">확인</button>
+
+    </div>
+</div>
+<div style="display: flex;">
+    <div id="comment-list" style="flex: .5;"></div>
+    <div id="user-list" style="flex: .5"></div>
+</div>
+<script>
+    async function uploadfile(userID) {
+        try {
+            let fileInput = $(`#upload-file-${userID}`)[0].files[0];
+            let formData = new FormData();
+            formData.append("srcFile", fileInput);
+
+            let responseUploadFile = await $.ajax({
+                type: "POST",
+                url: "/attachment",
+                data: formData,
+                contentType: false,
+                processData: false
+            });
+
+            let json = {
+                profileImageName : responseUploadFile.originalName,
+                profileImagePath : responseUploadFile.storepath
+            };
+
+            let responseChangeUserProfileImage = await $.ajax({
+                type: "PUT",
+                url: `/update/user/${userID}`,
+                data: JSON.stringify(json),
+                contentType: 'application/json; charset=utf-8',
+            });
+
+            console.log(responseChangeUserProfileImage);
+
+        } catch (e) {
+            console.log(JSON.stringify(e))
+        }
+    }
+
+    async function fetchCommentList() {
+        try {
+            let response = await $.get('list/comment');
+            for (let i = 0; i < response.length; i++) {
+                let comment = response[i];
+                $('#comment-list').append(
+                    getCommentDiv(comment)
+                );
+            }
+        } catch (e) {
+            $('#comment-list').html(JSON.stringify(e));
+        }
+    }
+
+    async function getUserList() {
+        try {
+            let response = await $.get('list/user');
+            console.log(response);
+            for (let i = 0; i < response.length; i++) {
+                let user = response[i];
+                $('#user-list').append(
+                    getUserDiv(user)
+                );
+            }
+        } catch (e) {
+            $('#user-list').html(JSON.stringify(e));
+        }
+    }
+
+    function postComment() {
+
+        const json = {
+            userID: 28,
+            content: $(`#comment-content-input`).val().trim()
+        };
+
+        $.ajax({
+            type: "POST",
+            url: "/add/comment",
+            data: JSON.stringify(json),
+            dataType: 'json',
+            contentType: 'application/json'
+
+        }).done(response => {
+            console.log(response);
+            $(`#comment-content-input`).val("");
+            $('#comment-list').append(
+                getCommentDiv(response)
+            );
+        }).fail(err => {
+            $('#display-response').html(JSON.stringify(err));
+        }).always()
+    }
+
+    async function addUser() {
+
+        const json = {
+            userName: $(`#user-name`).val().trim(),
+            email: $(`#user-email`).val().trim()
+        };
+
+        console.log(json);
+        let response = await $.ajax({
+            type: "POST",
+            url: "/add/user",
+            data: JSON.stringify(json),
+            contentType: 'application/json; charset=utf-8',
+        });
+
+        console.log(response);
+
+
+        $(`#user-name`).val("");
+        $(`#user-email`).val("");
+
+        $('#user-list').append(
+            getUserDiv(response)
+        );
+    }
+
+    function changeDivUpdateComment(button, id) {
+        editValue = $(`#comment-${id}-content`).html();
+        let input = `<input id="edit-comment-value" value="${editValue}">`;
+        $(`#comment-${id}-content`).html(input);
+        $(`#edit-comment-value`).focus();
+        $(button).text('확인');
+        $(button).next().text('취소')
+    }
+
+    let editValue = '';
+
+    async function updateComment(button, id) {
+        let line = $(`#comment-${id}-content`);
+        console.log(id);
+        if ($(button).text() === '수정') {
+            changeDivUpdateComment(button, id);
+        } else if ($(button).text() === '확인') {
+            editValue = $('#edit-comment-value').val();
+            console.log(editValue);
+            const json = {
+                userID: 28,
+                content: editValue
+            };
+
+            try {
+                let response = await $.ajax({
+                    type: "PUT",
+                    url: `/update/comment/${id}`,
+                    data: JSON.stringify(json),
+                    contentType: 'application/json; charset=utf-8',
+                });
+
+                if (editValue !== $('#edit-comment-value').val()) {
+                    ;
+                }
+                let div = `<div style="width: 350px; overflow: auto">${response.content}</div>`;
+                line.html(`${response.content}`);
+                $(button).text('수정');
+                $(button).next().text('삭제');
+                editValue = null;
+            } catch (e) {
+                line.html(e);
+            }
+        }
+    }
+
+
+    let editNameValue = '';
+    let editEmailValue = '';
+
+    async function updateUser(button, id) {
+        let line = $(`#user-${id}`);
+        console.log(id);
+        if ($(button).text() === '수정') {
+            editNameValue = line.find(`div:nth-child(1)`).html();
+            editEmailValue = line.find(`div:nth-child(2)`).html();
+            let inputName = `<input id="edit-name-value" value="${editNameValue}">`;
+            let inputEmail = `<input id="edit-email-value" value="${editEmailValue}">`;
+            line.find('div:nth-child(1)').html(inputName);
+            line.find('div:nth-child(2)').html(inputEmail);
+
+            $(button).text('확인');
+            $(button).next().text('취소');
+        } else if ($(button).text() === '확인') {
+            editNameValue = $(`#edit-name-value`).val().trim();
+            editEmailValue = $(`#edit-email-value`).val().trim();
+
+            console.log(editNameValue + " " + editEmailValue);
+
+            const json = {
+                userName: editNameValue,
+                email: editEmailValue
+            };
+
+            console.log(json);
+
+            if (editEmailValue !== $('#edit-email-value').val() && editNameValue !== $('#edit-name-value').val()) {
+                ;
+            }
+
+            let response = await $.ajax({
+                type: "PUT",
+                url: `/update/user/${id}`,
+                data: JSON.stringify(json),
+                contentType: 'application/json; charset=utf-8',
+            });
+
+            console.log(line);
+
+            line.find('div:nth-child(1)').html(response.userName);
+            line.find('div:nth-child(2)').html(response.email);
+
+            $(button).text('수정');
+            $(button).next().text('삭제');
+            editNameValue = null;
+            editEmailValue = null;
+        }
+    }
+
+    async function deleteComment(button, id) {
+        let line = $(`#comment-${id}`);
+        if ($(button).text() === '삭제') {
+
+            let response = await $.ajax({
+                type: "DELETE",
+                url: `/delete/comment/${id}`,
+                contentType: 'application/json; charset=utf-8',
+            });
+
+            console.log(response);
+
+
+            line.remove();
+
+        } else if ($(button).text() === '취소') {
+            editValue = $('#edit-comment-value').val().trim();
+            console.log("Aa");
+            if (editValue === null) return;
+            console.log(editValue);
+            $(button).prev().text('수정');
+            $(button).text('삭제');
+            $(`#comment-${id}-content`).html(editValue);
+            console.log(editValue);
+            editValue = null;
+        }
+    }
+    async function deleteUser(button, id) {
+        let line = $(`#user-${id}`);
+        if ($(button).text() === '삭제') {
+
+            let response = await $.ajax({
+                type: "DELETE",
+                url: `/delete/user/${id}`,
+                contentType: 'application/json; charset=utf-8',
+            });
+
+            console.log(id);
+            console.log(response);
+            if (response)
+                line.remove();
+
+        } else if ($(button).text() === '취소') {
+            editNameValue = $('#edit-name-value').val().trim();
+            editEmailValue = $('#edit-email-value').val().trim();
+            if (editEmailValue === null && editNameValue === null) return;
+            $(button).prev().text('수정');
+            $(button).text('삭제');
+            $(`#user-${id}-name`).html(editNameValue);
+            $(`#user-${id}-email`).html(editValue);
+            console.log(editValue);
+            editValue = null;
+        }
+    }
+
+    function getCommentDiv(comment) {
+        return `<div id="comment-${comment.id}" style="display: flex; border-bottom: 1px solid silver">
+                        <div style="width: 150px;">${comment.username}</div>
+                        <div style="width: 350px; overflow: auto" id="comment-${comment.id}-content">${comment.content}</div>
+                        <button id="update-comment-button" onclick="updateComment(this,${comment.id})">수정</button>
+                        <button id="delete-comment-button" onclick="deleteComment(this,${comment.id})">삭제</button>
+                    </div>`
+
+    }
+
+    function getUserDiv(user) {
+        return `<div id="user-${user.id}" style="display: flex; border-bottom: 1px solid silver">
+                        <div id="user-${user.id}-name" style="width: 150px;">${user.userName}</div>
+                        <div id="user-${user.id}-email" style="width: 350px; overflow: auto">${user.email}</div>
+                        <button id="update-user-button" onclick="updateUser(this,${user.id})">수정</button>
+                        <button id="delete-user-button" onclick="deleteUser(this,${user.id})">삭제</button>
+                        <input type="file" id="upload-file-${user.id}">
+                        <button onclick="uploadfile(${user.id})">프로필업로드</button>
+                    </div>`
+    }
+
+    fetchCommentList();
+    getUserList();
+
+</script>
+</body>
+</html>
